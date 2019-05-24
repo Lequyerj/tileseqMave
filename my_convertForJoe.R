@@ -40,7 +40,7 @@ indata <- read.csv(infile)
 cat("done\n")
 
 #Check that all required columns are present
-required <- c("hgvs_pro","score","sd","se")
+required <- c("phgvs","score","sd","se")
 if (!all(required %in% colnames(indata))) {
 	missing <- setdiff(required,colnames(indata))
 	stop("Input file ",infile," is missing the following column(s): ",paste(missing,collapse=", "))
@@ -48,7 +48,7 @@ if (!all(required %in% colnames(indata))) {
 
 #parse HGVS variant descriptor strings
 cat("Parsing HGVS variant descriptors...")
-vardata <- parseHGVS(indata$hgvs_pro,aacode=1)
+vardata <- parseHGVS(indata$phgvs,aacode=1)
 vardata[which(vardata$variant=="*"),"type"] <- "nonsense"
 cat("done\n")
 
