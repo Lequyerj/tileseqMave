@@ -30,62 +30,65 @@ library(hgvsParseR)
 # 	stop("df must be an integer!")
 # }
 
-infile <- "../R_DMS/data/detailed_scores.csv"
-outfile <- "../R_DMS/data/detailed_scores_joe_format.txt"
-df <- 2
+# infile <- "../R_DMS/data/detailed_scores.csv"
+# outfile <- "../R_DMS/data/detailed_scores_joe_format.txt"
+# df <- 2
 
-#Read input file
-cat("Reading input file...")
-indata <- read.csv(infile)
-cat("done\n")
-
-#Check that all required columns are present
-required <- c("hgvsp","score","sd","se")
-if (!all(required %in% colnames(indata))) {
-	missing <- setdiff(required,colnames(indata))
-	stop("Input file ",infile," is missing the following column(s): ",paste(missing,collapse=", "))
+my_convert_for_joe <- function(infile, outfile, df) {
+    
+  #Read input file
+  cat("Reading input file...")
+  indata <- read.csv(infile)
+  cat("done\n")
+  
+  #Check that all required columns are present
+  required <- c("hgvsp","score","sd","se")
+  if (!all(required %in% colnames(indata))) {
+  	missing <- setdiff(required,colnames(indata))
+  	stop("Input file ",infile," is missing the following column(s): ",paste(missing,collapse=", "))
+  }
+  
+  #parse HGVS variant descriptor strings
+  cat("Parsing HGVS variant descriptors...")
+  vardata <- parseHGVS(indata$hgvsp,aacode=1)
+  vardata[which(vardata$variant=="*"),"type"] <- "nonsense"
+  cat("done\n")
+  
+  #Check to make sure the HGVS strings were all valid
+  if (any(vardata$type == "invalid")) {
+  	#If not, complain!
+  	warning(sprintf(
+  		"There were %d invalid HGVS strings!",
+  		sum(vardata$type == "invalid")
+  	))
+  }
+  
+  #Build output table
+  cat("Building output table...")
+  outdata <- data.frame(
+  	aa_pos=vardata$start,
+  	aa_ref=vardata$ancestral,
+  	aa_alt=apply(vardata, 1, function(row) {
+  		switch(row[["type"]],
+  			synonymous = row[["ancestral"]],
+  			nonsense = "_",
+  			substitution = row[["variant"]],
+  			default = stop("Unrecognized variant type!")
+  		)
+  	}),
+  	#we intentionally use the standard error as the quality score here instead of
+  	# quality_score=indata$phiPrime,
+  	quality_score=indata$se,
+  	num_replicates=df,
+  	fitness_input=indata$score,
+  	fitness_input_sd=indata$sd
+  )
+  cat("done\n")
+  
+  #write results to file
+  cat("Writing results to file...")
+  write.table(outdata,outfile,sep="\t",row.names=FALSE,quote=FALSE)
+  cat("done\n")
+  
+  cat("\nScript completed successfully!\n")
 }
-
-#parse HGVS variant descriptor strings
-cat("Parsing HGVS variant descriptors...")
-vardata <- parseHGVS(indata$hgvsp,aacode=1)
-vardata[which(vardata$variant=="*"),"type"] <- "nonsense"
-cat("done\n")
-
-#Check to make sure the HGVS strings were all valid
-if (any(vardata$type == "invalid")) {
-	#If not, complain!
-	warning(sprintf(
-		"There were %d invalid HGVS strings!",
-		sum(vardata$type == "invalid")
-	))
-}
-
-#Build output table
-cat("Building output table...")
-outdata <- data.frame(
-	aa_pos=vardata$start,
-	aa_ref=vardata$ancestral,
-	aa_alt=apply(vardata, 1, function(row) {
-		switch(row[["type"]],
-			synonymous = row[["ancestral"]],
-			nonsense = "_",
-			substitution = row[["variant"]],
-			default = stop("Unrecognized variant type!")
-		)
-	}),
-	#we intentionally use the standard error as the quality score here instead of
-	# quality_score=indata$phiPrime,
-	quality_score=indata$se,
-	num_replicates=df,
-	fitness_input=indata$score,
-	fitness_input_sd=indata$sd
-)
-cat("done\n")
-
-#write results to file
-cat("Writing results to file...")
-write.table(outdata,outfile,sep="\t",row.names=FALSE,quote=FALSE)
-cat("done\n")
-
-cat("\nScript completed successfully!\n")

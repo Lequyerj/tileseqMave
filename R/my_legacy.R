@@ -1,4 +1,15 @@
-# Copyright (C) 2018  Jochen Weile, Roth Lab
+# 
+
+if (!require(ggplot2)) {
+  install.packages("ggplot2")
+}
+library(ggplot2)
+if (!require(hexbin)) {
+  install.packages("hexbin")
+}
+library(hexbin)
+
+#Copyright (C) 2018  Jochen Weile, Roth Lab
 #
 # This file is part of tileseqMave.
 #
@@ -40,10 +51,23 @@
 #'       Defaults to 2.
 #' @param conservativeMode Boolean flag. When turned on, pseudoObservations are not counted towards 
 #'       standard error and the first round of regularization uses pessimistic error estimates.
+#' @param num_sd number of standard deviations of the sequencing error that the counts must be 
+#'       above to not be considered 0 in the pre-filtering
+#'
 #' @return nothing. output is written to various files in the output directory
 #' @export
-analyzeLegacyTileseqCounts <- function(countfile,regionfile,outdir,logger=NULL,
-	inverseAssay=FALSE,pseudoObservations=2,conservativeMode=TRUE) {
+my_analyzeLegacyTileseqCounts <- function(countfile,regionfile,outdir,logger=NULL,
+	inverseAssay=FALSE,pseudoObservations=2,conservativeMode=TRUE, num_sd = 3) {
+  
+  
+  # countfile <- "../R_DMS/data/rawData_GDI1_2016Q20_MAVEtileseq_input.txt"
+  # regionfile <- "../R_DMS/data/GDI1_regionfile.txt"
+  # outdir <- "../R_DMS/data/"
+  # logger <- NULL
+  # inverseAssay <- F
+  # pseudoObservations <- 2
+  # conservativeMode <- T
+  # num_sd <- 3
 
 	library(hgvsParseR)
 	# library(yogilog)
@@ -175,6 +199,20 @@ analyzeLegacyTileseqCounts <- function(countfile,regionfile,outdir,logger=NULL,
 	))
 
 
+	plot1 <- ggplot(data = rawCounts, mapping = aes(x = nonselect1 - controlNS1, y = select1 - controlS1)) +
+	  geom_hex(bins = 400) +
+	  theme_bw() +
+	  coord_cartesian(xlim = c(-100, 300), ylim = c(-100, 300)) +
+	  ggtitle("Before pre-filters, replicate 1")
+	print(plot1)
+	
+	plot2 <- ggplot(data = rawCounts, mapping = aes(x = nonselect2 - controlNS2, y = select2 - controlS2)) +
+	  geom_hex(bins = 400) +
+	  theme_bw() +
+	  coord_cartesian(xlim = c(-100, 300), ylim = c(-100, 300)) +
+	  ggtitle("Before pre-filters, replicate 2")
+	print(plot2)
+	
 	#apply pre-filter on variants
 	rawmsd <- do.call(cbind,lapply(condNames,function(cond) {
 		msd <- t(apply(rawCounts[,condMatrix[cond,]],1,function(xs){
@@ -184,10 +222,10 @@ analyzeLegacyTileseqCounts <- function(countfile,regionfile,outdir,logger=NULL,
 		msd
 	}))
 	flagged1 <- with(as.data.frame(rawmsd), {
-		controlNS.mean + 3*controlNS.sd >= nonselect.mean
+	  (controlNS.mean + num_sd*controlNS.sd >= rawCounts$nonselect1) | (controlNS.mean + num_sd*controlNS.sd >= rawCounts$nonselect2)
 	})
 	flagged2 <- with(as.data.frame(rawmsd), {
-		controlS.mean + 3*controlS.sd >= select.mean
+		(controlS.mean + num_sd*controlS.sd >= rawCounts$select1) | (controlS.mean + num_sd*controlS.sd >= rawCounts$select2)
 	})
 	logInfo(sprintf(
 "Filtering out %d variants (=%.02f%%):
@@ -205,6 +243,21 @@ analyzeLegacyTileseqCounts <- function(countfile,regionfile,outdir,logger=NULL,
 		"Data remains for for %d variants covering %d amino acid changes",
 		length(hgvsc),length(unique(hgvsp))
 	))
+	
+	plot3 <- ggplot(data = rawCountsFiltered, mapping = aes(x = nonselect1 - controlNS1, y = select1 - controlS1)) +
+	  geom_hex(bins = 400) +
+	  theme_bw() +
+	  coord_cartesian(xlim = c(-100, 300), ylim = c(-100, 300)) +
+	  ggtitle("After pre-filters, replicate 1")
+	print(plot3)
+	
+	plot4 <- ggplot(data = rawCountsFiltered, mapping = aes(x = nonselect2 - controlNS2, y = select2 - controlS2)) +
+	  #geom_point() +
+	  geom_hex(bins = 400) +
+	  theme_bw() +
+	  coord_cartesian(xlim = c(-100,300), ylim = c(-100, 300)) +
+	  ggtitle("After pre-filters, replicate 2")
+	print(plot4)
 
 
 	#collapse codons into unique AA changes
@@ -742,17 +795,4 @@ analyzeLegacyTileseqCounts <- function(countfile,regionfile,outdir,logger=NULL,
 	joinFiles("mavedb_scores_perAA")
 
 }
-
-if (FALSE) {
-  devtools::install_github("jweile/hgvsParseR")
-  devtools::install_github("jweile/yogilog")
-  devtools::install_github("jweile/yogitools")
-  
-  
-  analyzeLegacyTileseqCounts("../R_DMS/data/rawData_GDI1_2016Q20_MAVEtileseq_input.txt",
-                             "../R_DMS/data/GDI1_regionfile.txt",
-                             "../R_DMS/data/",
-                             conservativeMode = F)
-}
-
 
