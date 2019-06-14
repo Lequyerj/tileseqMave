@@ -658,7 +658,9 @@ my_analyzeLegacyTileseqCounts <- function(countfile,regionfile,outdir,logger=NUL
 		stop_cut_plot <- ggplot(data = stop_cutoff_table,
 		                        mapping = aes(x = position, y = median)) +
 		  geom_line() +
-		  theme_linedraw()
+		  theme_linedraw() +
+		  ylab(expression(paste('median ', log(phi)))) +
+		  xlab('aa position')
 		print(stop_cut_plot)
 		
 		# CHOOSE 350!! for GDI1
@@ -681,7 +683,8 @@ my_analyzeLegacyTileseqCounts <- function(countfile,regionfile,outdir,logger=NUL
 		  geom_vline(xintercept = median_stop, size=1, linetype=2, color='darkred') +
 		  geom_vline(xintercept = median_syn, size=1, linetype=2, color='darkgreen') +
 		  geom_text(aes(x=median_syn + 0.15, label=median_syn, y=6)) +
-		  geom_text(aes(x=median_stop + 0.15, label=median_stop, y=6))
+		  geom_text(aes(x=median_stop + 0.15, label=median_stop, y=6)) +
+		  xlab(expression(log(phi)))
 		print(hist1)
 		
 		# plot ALL of the syns and stops and their medians
@@ -698,7 +701,8 @@ my_analyzeLegacyTileseqCounts <- function(countfile,regionfile,outdir,logger=NUL
 		  geom_vline(xintercept = median(rawScores$mean.lphi[stop.is]), size=1, linetype=2, color='darkred') +
 		  geom_vline(xintercept = median(rawScores$mean.lphi[syn.is]), size=1, linetype=2, color='darkgreen') +
 		  geom_text(aes(x=all_syn_median + 0.15, label=all_syn_median, y=6)) +
-		  geom_text(aes(x=all_stop_median + 0.15, label=all_stop_median, y=6))
+		  geom_text(aes(x=all_stop_median + 0.15, label=all_stop_median, y=6)) +
+		  xlab(expression(log(phi)))
 		print(hist2)
 		
 		# plot the missense and the syn and stops medians used for regulatization
@@ -707,8 +711,9 @@ my_analyzeLegacyTileseqCounts <- function(countfile,regionfile,outdir,logger=NUL
 		  theme_linedraw() +
 		  geom_vline(xintercept = median_stop, size=1, linetype=2, color='darkred') +
 		  geom_vline(xintercept = median_syn, size=1, linetype=2, color='darkgreen') +
-		  geom_text(aes(x=median_syn + 0.2, label=median_syn, y=325)) +
-		  geom_text(aes(x=median_stop + 0.2, label=median_stop, y=325))
+		  geom_text(aes(x=median_syn + 0.2, label=median_syn, y=350)) +
+		  geom_text(aes(x=median_stop + 0.2, label=median_stop, y=350)) +
+		  xlab(expression(log(phi)))
 		print(hist3)
 
 		#################
