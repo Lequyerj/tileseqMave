@@ -9,6 +9,13 @@ if (!require(hexbin)) {
 }
 library(hexbin)
 
+# Adapted from Jochen's script
+# Changes made by Rachel include:
+# 1. bottleneck and song's filter now filter out variants that are 0 in EITHER replicate (not the mean of the replicates)
+# 2. add a plot for choosing position cutoff for calculating the median stop log(phi) 
+# 3. add a position cutoff for stop mutations!! - NOTE THIS SCRIPT CONTAINS THE CONSTANT 350 WHICH IS THE CUTOFF FOR GDI1
+# 4. multiple other plots for visualization of data
+
 #Copyright (C) 2018  Jochen Weile, Roth Lab
 #
 # This file is part of tileseqMave.
@@ -26,13 +33,13 @@ library(hexbin)
 # You should have received a copy of the GNU Affero General Public License
 # along with tileseqMave.  If not, see <https://www.gnu.org/licenses/>.
 
-#' analyze tileseq counts from legacy pipeline
+#' "my" analyze tileseq counts from legacy pipeline
 #'
 #' This analysis function performs the following steps for each mutagenesis region:
 #' 1. Construction of HGVS variant descriptor strings.
 #' 2. Collapsing equivalent codons into amino acic change counts.
 #' 3. Error regularization at the level of pre- and post-selection counts.
-#' 4. Quality-based filtering filtering based on "Song's rule".
+#' 4. Quality-based filtering filtering based on "Song's rule". AND BOTTLENECK FILTER
 #' 5. Fitness score calculation and error propagation.
 #' 6. Secondary error regularization at the level of fitness scores.
 #' 7. Determination of synonymous and nonsense medians and re-scaling of fitness scores.
@@ -244,13 +251,13 @@ my_analyzeLegacyTileseqCounts <- function(countfile,regionfile,outdir,logger=NUL
 		length(hgvsc),length(unique(hgvsp))
 	))
 	
+	# visualize what data was filtered out with heatmap
 	plot3 <- ggplot(data = rawCountsFiltered, mapping = aes(x = nonselect1 - controlNS1, y = select1 - controlS1)) +
 	  geom_hex(bins = 400) +
 	  theme_bw() +
 	  coord_cartesian(xlim = c(-100, 300), ylim = c(-100, 300)) +
 	  ggtitle("After pre-filters, replicate 1")
 	print(plot3)
-	
 	plot4 <- ggplot(data = rawCountsFiltered, mapping = aes(x = nonselect2 - controlNS2, y = select2 - controlS2)) +
 	  #geom_point() +
 	  geom_hex(bins = 400) +
@@ -619,12 +626,80 @@ my_analyzeLegacyTileseqCounts <- function(countfile,regionfile,outdir,logger=NUL
 			}
 		}
 
-		modes <- with(rawScores,{	
-			stops <- mean.lphi[which(grepl("Ter$",hgvsp) & bsd.lphi < sdCutoff)]
-			syns <- mean.lphi[which(grepl("=$",hgvsp) & bsd.lphi < sdCutoff)]
-			c(stop=median(stops,na.rm=TRUE),syn=median(syns,na.rm=TRUE))
-		})
+		# funciton to get the aa position from hgvsp
+		get_pos_from_hgvsp <- function(variant) {
+		  variant <- unlist(strsplit(variant, split = ""))
+		  nums <- grep(pattern = "[0-9]", x = variant, value = TRUE)
+		  pos <- as.numeric(paste(nums, collapse = ""))
+		  return(pos)
+		}
+		
+		
+		# get the positions of rawCounts rows (note they are in the same order)
+		rawScores$positions <- unlist(lapply(rawScores$hgvsp, get_pos_from_hgvsp))
+		# use sliding window to choose a stop_cutoff
+		stop_cutoff_table <- data.frame(c(position = numeric(), median = numeric()))
+		length <- max(rawScores$positions)
+		step <- 30
+		for (i in seq(from=1, to = length, by = step)) {
+		  pos <- i
+		  sel <- (grepl("Ter$",rawScores$hgvsp) & 
+		            (rawScores$positions < pos + step) &
+		            (rawScores$positions >= pos))
+		  try_stops <- rawScores$mean.lphi[sel]
+		  print(try_stops)
+		  median <- median(try_stops,na.rm=TRUE)
+		  stop_cutoff_table <- rbind(stop_cutoff_table, c(pos, median))
+		  names(stop_cutoff_table) <- c('position', 'median')
+		}
+		print(stop_cutoff_table)
+		
+		# choose the cutoff visually from the plot 
+		stop_cut_plot <- ggplot(data = stop_cutoff_table,
+		                        mapping = aes(x = position, y = median)) +
+		  geom_line() +
+		  theme_linedraw()
+		print(stop_cut_plot)
+		
+		# CHOOSE 350!! for GDI1
+		stop_cutoff <- 350 # this is a constant for GDI1
+		# now we have chosen the cutoff, calculate the medians to use to scale the fitness scores
+		stops <- rawScores$mean.lphi[which(grepl("Ter$",rawScores$hgvsp) 
+		                                   & rawScores$bsd.lphi < sdCutoff 
+		                                   & rawScores$positions <= stop_cutoff # added by Rachel
+		                                     )]
+		syns <- rawScores$mean.lphi[which(grepl("=$",rawScores$hgvsp) & rawScores$bsd.lphi < sdCutoff)]
+		modes <- c(stop=median(stops,na.rm=TRUE),syn=median(syns,na.rm=TRUE)) # keep this for jochen's plots but i will use a different variable name for mine
+		median_syn <- round(median(syns,na.rm=TRUE), digits = 2)
+		median_stop <- round(median(stops,na.rm=TRUE), digits = 2)
 
+		# plot only the syns and stops used in the median calculation
+		hist1 <- ggplot() +
+		  geom_histogram(data = data.frame(mean.lphi=stops), mapping = aes(x = mean.lphi, y = ..density..),  fill = 'darkred', alpha = 0.5, col = 'black') +
+		  geom_histogram(data = data.frame(mean.lphi=syns), mapping = aes(x = mean.lphi, y = ..density..),  fill = 'darkgreen', alpha = 0.5, col = 'black') +
+		  theme_linedraw() +
+		  geom_vline(xintercept = median_stop, size=1, linetype=2, color='darkred') +
+		  geom_vline(xintercept = median_syn, size=1, linetype=2, color='darkgreen') +
+		  geom_text(aes(x=median_syn, label=median_syn, y=5)) +
+		  geom_text(aes(x=median_stop, label=median_stop, y=5))
+		print(hist1)
+		
+		# plot ALL of the syns and stops and their medians
+		stop.is <- which(grepl("Ter$",rawScores$hgvsp))
+		syn.is <- which(grepl("=$",rawScores$hgvsp))
+		miss.is <- setdiff(1:nrow(rawScores),c(stop.is,syn.is))
+		all_stop_median <- round(median(rawScores$mean.lphi[stop.is]), digits = 2)
+		all_syn_median <- round(median(rawScores$mean.lphi[syn.is]), digits = 2)
+		
+		hist2 <- ggplot() +
+		  geom_histogram(data = rawScores[stop.is,], mapping = aes(x = mean.lphi, y = ..density..),  fill = 'darkred', alpha = 0.5, col = 'black') +
+		  geom_histogram(data = rawScores[syn.is,], mapping = aes(x = mean.lphi, y = ..density..),  fill = 'darkgreen', alpha = 0.5, col = 'black') +
+		  theme_linedraw() +
+		  geom_vline(xintercept = median(rawScores$mean.lphi[stop.is]), size=1, linetype=2, color='darkred') +
+		  geom_vline(xintercept = median(rawScores$mean.lphi[syn.is]), size=1, linetype=2, color='darkgreen') +
+		  geom_text(aes(x=all_syn_median, label=all_syn_median, y=5)) +
+		  geom_text(aes(x=all_stop_median, label=all_stop_median, y=5))
+		print(hist2)
 
 		#################
 		#Plot Syn vs stop
