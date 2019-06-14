@@ -680,8 +680,8 @@ my_analyzeLegacyTileseqCounts <- function(countfile,regionfile,outdir,logger=NUL
 		  theme_linedraw() +
 		  geom_vline(xintercept = median_stop, size=1, linetype=2, color='darkred') +
 		  geom_vline(xintercept = median_syn, size=1, linetype=2, color='darkgreen') +
-		  geom_text(aes(x=median_syn, label=median_syn, y=5)) +
-		  geom_text(aes(x=median_stop, label=median_stop, y=5))
+		  geom_text(aes(x=median_syn + 0.15, label=median_syn, y=6)) +
+		  geom_text(aes(x=median_stop + 0.15, label=median_stop, y=6))
 		print(hist1)
 		
 		# plot ALL of the syns and stops and their medians
@@ -697,9 +697,19 @@ my_analyzeLegacyTileseqCounts <- function(countfile,regionfile,outdir,logger=NUL
 		  theme_linedraw() +
 		  geom_vline(xintercept = median(rawScores$mean.lphi[stop.is]), size=1, linetype=2, color='darkred') +
 		  geom_vline(xintercept = median(rawScores$mean.lphi[syn.is]), size=1, linetype=2, color='darkgreen') +
-		  geom_text(aes(x=all_syn_median, label=all_syn_median, y=5)) +
-		  geom_text(aes(x=all_stop_median, label=all_stop_median, y=5))
+		  geom_text(aes(x=all_syn_median + 0.15, label=all_syn_median, y=6)) +
+		  geom_text(aes(x=all_stop_median + 0.15, label=all_stop_median, y=6))
 		print(hist2)
+		
+		# plot the missense and the syn and stops medians used for regulatization
+		hist3 <- ggplot() +
+		  geom_histogram(data = rawScores[miss.is,], mapping = aes(x = mean.lphi),  fill = 'grey', alpha = 0.5, col = 'black') +
+		  theme_linedraw() +
+		  geom_vline(xintercept = median_stop, size=1, linetype=2, color='darkred') +
+		  geom_vline(xintercept = median_syn, size=1, linetype=2, color='darkgreen') +
+		  geom_text(aes(x=median_syn + 0.2, label=median_syn, y=325)) +
+		  geom_text(aes(x=median_stop + 0.2, label=median_stop, y=325))
+		print(hist3)
 
 		#################
 		#Plot Syn vs stop
