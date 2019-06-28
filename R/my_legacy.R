@@ -1,20 +1,15 @@
-# 
-
-if (!require(ggplot2)) {
-  install.packages("ggplot2")
-}
-library(ggplot2)
-if (!require(hexbin)) {
-  install.packages("hexbin")
-}
-library(hexbin)
 
 # Adapted from Jochen's script
 # Changes made by Rachel include:
 # 1. bottleneck and song's filter now filter out variants that are 0 in EITHER replicate (not the mean of the replicates)
 # 2. add a plot for choosing position cutoff for calculating the median stop log(phi) 
-# 3. add a position cutoff for stop mutations!! - NOTE THIS SCRIPT CONTAINS THE CONSTANT 350 WHICH IS THE CUTOFF FOR GDI1
-# 4. multiple other plots for visualization of data
+# 3. multiple plots for visualization of data
+# 4. can now turn off bottleneck (Select) filter
+# 5. option to change the number of SDs to use in bottleneck and Song's filter (more or less conservative)
+# 6. Include option to use a stop cutoff for calculating stop median
+# 7. Can customize how many variants must pass filters for calculating medians
+# 8. Can customize the quality threshhold for median calculation (and an alternative one in the case not enough variants pass the first one)
+# 9. Added a nonselect count filter, remove any variants that are not abundant enough in nonselect condition
 
 #Copyright (C) 2018  Jochen Weile, Roth Lab
 #
@@ -33,7 +28,6 @@ library(hexbin)
 # You should have received a copy of the GNU Affero General Public License
 # along with tileseqMave.  If not, see <https://www.gnu.org/licenses/>.
 
-#' "my" analyze tileseq counts from legacy pipeline
 #'
 #' This analysis function performs the following steps for each mutagenesis region:
 #' 1. Construction of HGVS variant descriptor strings.
@@ -45,6 +39,18 @@ library(hexbin)
 #' 7. Determination of synonymous and nonsense medians and re-scaling of fitness scores.
 #' 8. Flooring of negative scores and adjustment of associated error.
 #' 9. Output in MaveDB format.
+#' 
+#' Plus several new changes:
+#' 1. bottleneck and song's filter now filter out variants that are 0 in EITHER replicate (not the mean of the replicates)
+#' 2. add a plot for choosing position cutoff for calculating the median stop log(phi) 
+#' 3. multiple plots for visualization of data
+#' 4. can now turn off bottleneck (Select) filter
+#' 5. option to change the number of SDs to use in bottleneck and Song's filter (more or less conservative)
+#' 6. Include option to use a stop cutoff for calculating stop median
+#' 7. Can customize how many variants must pass filters for calculating medians
+#' 8. Can customize the quality threshhold for median calculation (and an alternative one in the case not enough variants pass the first one)
+#' 9. Added a nonselect count filter, remove any variants that are not abundant enough in nonselect condition
+
 #' 
 #' @param countfile the path to the "rawData.txt" file produced by the legacy pipeline.
 #' @param regionfile the path to a csv file describing the mutagenesis regions. Must contain columns 
@@ -58,11 +64,42 @@ library(hexbin)
 #'       Defaults to 2.
 #' @param conservativeMode Boolean flag. When turned on, pseudoObservations are not counted towards 
 #'       standard error and the first round of regularization uses pessimistic error estimates.
-#' @param num_sd number of standard deviations of the sequencing error that the counts must be 
-#'       above to not be considered 0 in the pre-filtering
+#' @param ns_filt_num_sd Integer (between -3 and 3 suggested, other values unlikely to be meaningful).
+#'       The number of standard deviations to be used in the nonselect filter (aka Song's filter, aka sequencing error filter).
+#'       Variant's counts less than this number of standard deviations from the control mean 
+#'       will be termed "likely 0" and filtered out. 3 filters out the most data (anything that could be 0),
+#'       and -3 filters out the least data (anything that is definitely 0). Default is 3.
+#' @param select_filt_num_sd Integer (between -3 and 3 suggested, other values unlikely to be meaningful).
+#'       The number of standard deviations to be used in the select filter (aka bottleneck filter, aka backwards ORF filter).
+#'       Variant's counts less than this number of standard deviations from the control mean 
+#'       will be termed "likely 0" and filtered out. 3 filters out the most data (anything that could be 0),
+#'       and -3 filters out the least data (anything that is definitely 0). Default is 3. This parameter
+#'       is ignored if select_filt is FALSE.
+#' @param select_filt Boolean flag. Indicates whether to use the select filter (aka bottleneck filter).
+#'       Default is TRUE.
+#' @param min_nonselect_counts Numeric. Nonselective counts filter cutoff (in reads/million).
+#'       Filter all variants below this count out of the entire data set. Default is -Inf.
+#' @param stop_cutoff Integer. The amino position above which to not include stop mutations in calculation
+#'       of the stop median for scaling fitness scores. Default is NULL, in which case the length of the
+#'       gene is chosen. This script outputs a plot in outdir to help choose this parameter in
+#'       future runs.
+#' @param sdCutoff Numeric. The standard deviation cutoff to use to choose high
+#'       confidence variants to calculate stop and syn medians for fitness score scaling.
+#'       Default is 0.3.
+#' @param sdCutoffAlt Numeric. Should be higher than sdCutoff. The alternative standard deviation cutoff to use to choose high
+#'       confidence variants to calculate stop and syn medians if not enough variants pass the
+#'       initial cutoff sdCutoff.
+#'       Default is 1.    
+#' @param min_variants_to_choose_median Integer. The minimum number of variants that must pass
+#'       pass the quality filters in order to calculate stop and syn medians. Note that
+#'       if this amount is not met after the alternative filter, then no filter will be used.  
 #'
 #' @return nothing. output is written to various files in the output directory
+#' 
+#' @import ggplot2
+#' 
 #' @export
+#' 
 my_analyzeLegacyTileseqCounts <- function(countfile,
                                           regionfile,
                                           outdir,
@@ -80,7 +117,7 @@ my_analyzeLegacyTileseqCounts <- function(countfile,
                                           min_variants_to_choose_median=10
                                           ) {
   
-  
+  options(warn=-1)
   # countfile <- "../R_DMS/data/rawData_GDI1_2016Q20_MAVEtileseq_input.txt"
   # regionfile <- "../R_DMS/data/GDI1_regionfile.txt"
   # outdir <- "../R_DMS/data/"
@@ -90,9 +127,9 @@ my_analyzeLegacyTileseqCounts <- function(countfile,
   # conservativeMode <- T
   # num_sd <- 3
 
-	library(hgvsParseR)
+	#library(hgvsParseR)
 	# library(yogilog)
-	library(yogitools)
+	#library(yogitools)
 
 	options(stringsAsFactors=FALSE)
 
