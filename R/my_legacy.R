@@ -63,8 +63,22 @@ library(hexbin)
 #'
 #' @return nothing. output is written to various files in the output directory
 #' @export
-my_analyzeLegacyTileseqCounts <- function(countfile,regionfile,outdir,logger=NULL,
-	inverseAssay=FALSE,pseudoObservations=2,conservativeMode=TRUE, num_sd = 3) {
+my_analyzeLegacyTileseqCounts <- function(countfile,
+                                          regionfile,
+                                          outdir,
+                                          logger=NULL,
+                                          inverseAssay=FALSE,
+                                          pseudoObservations=2,
+                                          conservativeMode=TRUE, 
+                                          ns_filt_num_sd=3,
+                                          select_filt_num_sd=3, 
+                                          select_filt=T, 
+                                          min_nonselect_counts=-Inf,
+                                          stop_cutoff=NULL, 
+                                          sdCutoff=0.3, 
+                                          sdCutoffAlt=1, 
+                                          min_variants_to_choose_median=10
+                                          ) {
   
   
   # countfile <- "../R_DMS/data/rawData_GDI1_2016Q20_MAVEtileseq_input.txt"
@@ -204,23 +218,11 @@ my_analyzeLegacyTileseqCounts <- function(countfile,regionfile,outdir,logger=NUL
 		"Detected %d replicates for %d conditions: %s",
 		length(repNames), length(unique(condNames)), paste(condNames,collapse=", ")
 	))
-
-
-	plot1 <- ggplot(data = rawCounts, mapping = aes(x = nonselect1 - controlNS1, y = select1 - controlS1)) +
-	  geom_hex(bins = 400) +
-	  theme_bw() +
-	  coord_cartesian(xlim = c(-100, 300), ylim = c(-100, 300)) +
-	  ggtitle("Before pre-filters, replicate 1")
-	print(plot1)
 	
-	plot2 <- ggplot(data = rawCounts, mapping = aes(x = nonselect2 - controlNS2, y = select2 - controlS2)) +
-	  geom_hex(bins = 400) +
-	  theme_bw() +
-	  coord_cartesian(xlim = c(-100, 300), ylim = c(-100, 300)) +
-	  ggtitle("Before pre-filters, replicate 2")
-	print(plot2)
 	
-	#apply pre-filter on variants
+	# =====================================================
+	# apply pre-filter on variants
+	# =====================================================
 	rawmsd <- do.call(cbind,lapply(condNames,function(cond) {
 		msd <- t(apply(rawCounts[,condMatrix[cond,]],1,function(xs){
 			c(mean(xs,na.rm=TRUE), sd(xs,na.rm=TRUE))
@@ -228,43 +230,39 @@ my_analyzeLegacyTileseqCounts <- function(countfile,regionfile,outdir,logger=NUL
 		colnames(msd) <- paste0(cond,c(".mean",".sd"))
 		msd
 	}))
+	# Sequencing error filter (song's filter) / Nonselect filter
 	flagged1 <- with(as.data.frame(rawmsd), {
-	  (controlNS.mean + num_sd*controlNS.sd >= rawCounts$nonselect1) | (controlNS.mean + num_sd*controlNS.sd >= rawCounts$nonselect2)
+	  (controlNS.mean + ns_filt_num_sd*controlNS.sd >= rawCounts$nonselect1) | (controlNS.mean + ns_filt_num_sd*controlNS.sd >= rawCounts$nonselect2)
 	})
+	# Bottleneck filter / Select filter
 	flagged2 <- with(as.data.frame(rawmsd), {
-		(controlS.mean + num_sd*controlS.sd >= rawCounts$select1) | (controlS.mean + num_sd*controlS.sd >= rawCounts$select2)
+		(controlS.mean + select_filt_num_sd*controlS.sd >= rawCounts$select1) | (controlS.mean + select_filt_num_sd*controlS.sd >= rawCounts$select2)
+	})
+	if (select_filt==F) { # turn off the bottleneck filter if select_filt is false
+	  flagged2 <- rep.int(FALSE, times = nrow(rawmsd))
+	}
+	# Nonselect counts filter
+	flagged3 <- with(as.data.frame(rawmsd), {
+	  nonselect.mean < min_nonselect_counts
 	})
 	logInfo(sprintf(
 "Filtering out %d variants (=%.02f%%):
 %d (=%.02f%%) due to likely sequencing error.
-%d (=%.02f%%) due to likely bottlenecking.",
-		sum(flagged1|flagged2), 100*sum(flagged1|flagged2)/length(flagged1|flagged2),
+%d (=%.02f%%) due to likely bottlenecking.
+%d (=%.02f%%) due to insufficient representation in nonselect condition.",
+		sum(flagged1|flagged2|flagged3), 100*sum(flagged1|flagged2|flagged3)/length(flagged1|flagged2|flagged3),
 		sum(flagged1), 100*sum(flagged1)/length(flagged1),
-		sum(flagged2), 100*sum(flagged2)/length(flagged2)
+		sum(flagged2), 100*sum(flagged2)/length(flagged2),
+    sum(flagged3), 100*sum(flagged3)/length(flagged3)
 	))
-	rawCountsFiltered <- rawCounts[!(flagged1|flagged2),]
-	hgvsc <- hgvsc[!(flagged1|flagged2)]
-	hgvsp <- hgvsp[!(flagged1|flagged2)]
+	rawCountsFiltered <- rawCounts[!(flagged1|flagged2|flagged3),]
+	hgvsc <- hgvsc[!(flagged1|flagged2|flagged3)]
+	hgvsp <- hgvsp[!(flagged1|flagged2|flagged3)]
 
 	logInfo(sprintf(
 		"Data remains for for %d variants covering %d amino acid changes",
 		length(hgvsc),length(unique(hgvsp))
 	))
-	
-	# visualize what data was filtered out with heatmap
-	plot3 <- ggplot(data = rawCountsFiltered, mapping = aes(x = nonselect1 - controlNS1, y = select1 - controlS1)) +
-	  geom_hex(bins = 400) +
-	  theme_bw() +
-	  coord_cartesian(xlim = c(-100, 300), ylim = c(-100, 300)) +
-	  ggtitle("After pre-filters, replicate 1")
-	print(plot3)
-	plot4 <- ggplot(data = rawCountsFiltered, mapping = aes(x = nonselect2 - controlNS2, y = select2 - controlS2)) +
-	  #geom_point() +
-	  geom_hex(bins = 400) +
-	  theme_bw() +
-	  coord_cartesian(xlim = c(-100,300), ylim = c(-100, 300)) +
-	  ggtitle("After pre-filters, replicate 2")
-	print(plot4)
 
 
 	#collapse codons into unique AA changes
@@ -514,14 +512,6 @@ my_analyzeLegacyTileseqCounts <- function(countfile,regionfile,outdir,logger=NUL
 			)
 		}))
 
-		#Filter out for selection bottlenecking
-		flagged <- rawScores$mean.c <= c.ps
-		logInfo(sprintf(
-			"Filtering out %d variants (=%.02f%%) due to likely selection bottlenecking.",
-			sum(flagged), 100*sum(flagged)/nrow(rawScores)
-		))
-		rawScores <- rawScores[!flagged,]
-
 		##############
 		# 2nd round of regularization: This time for SD of scores
 		##############
@@ -609,23 +599,24 @@ my_analyzeLegacyTileseqCounts <- function(countfile,regionfile,outdir,logger=NUL
 		# Estimate Modes of synonymous and stop
 		#################
 
-		sdCutoff <- 0.3
-
 		####################3
 		#TODO: Require minimum amount of filter passes rather than just 1
 		#TODO: Try gaussian mixture models with two underlying distributions?
 		#########################
-		#if we can't find any syn/stop below the cutoff, increase the cutoff to 1
-		if (with(rawScores,!any(grepl("Ter$",hgvsp) & bsd.lphi < sdCutoff) ||
-			!any(grepl("=$",hgvsp) & bsd.lphi < sdCutoff) )) {
-			sdCutoff <- 1
-			#if we still can't find any below the new cutoff, get rid of it altogether
-			if (with(rawScores,!any(grepl("Ter$",hgvsp) & bsd.lphi < sdCutoff) ||
-				!any(grepl("=$",hgvsp) & bsd.lphi < sdCutoff) )) {
+		
+		# GET SD CUTOFF FOR MODES ESTIMATE
+		#if we can't find enough syn/stop below the cutoff, increase the cutoff to 1
+		if (with(rawScores,sum(grepl("Ter$",hgvsp)&bsd.lphi<sdCutoff)<min_variants_to_choose_median ||
+			sum(grepl("=$",hgvsp)&bsd.lphi<sdCutoff)<min_variants_to_choose_median )) {
+			sdCutoff <- sdCutoffAlt
+			#if we still can't find enough below the new cutoff, get rid of it altogether
+			if (with(rawScores,sum(grepl("Ter$",hgvsp)&bsd.lphi<sdCutoff)<min_variants_to_choose_median ||
+				sum(grepl("=$",hgvsp)&bsd.lphi<sdCutoff)<min_variants_to_choose_median )) {
 				sdCutoff <- Inf
 			}
 		}
 
+		# GET STOP CUTOFF FOR MODES ESTIMATE
 		# funciton to get the aa position from hgvsp
 		get_pos_from_hgvsp <- function(variant) {
 		  variant <- unlist(strsplit(variant, split = ""))
@@ -635,40 +626,33 @@ my_analyzeLegacyTileseqCounts <- function(countfile,regionfile,outdir,logger=NUL
 		}
 		
 		
-		# get the positions of rawCounts rows (note they are in the same order)
+		# get the positions 
 		rawScores$positions <- unlist(lapply(rawScores$hgvsp, get_pos_from_hgvsp))
-		# use sliding window to choose a stop_cutoff
-		stop_cutoff_table <- data.frame(c(position = numeric(), median = numeric()))
+		# length of the gene
 		length <- max(rawScores$positions)
-		step <- 30
-		for (i in seq(from=1, to = length, by = step)) {
-		  pos <- i
-		  sel <- (grepl("Ter$",rawScores$hgvsp) & 
-		            (rawScores$positions < pos + step) &
-		            (rawScores$positions >= pos))
-		  try_stops <- rawScores$mean.lphi[sel]
-		  print(try_stops)
-		  median <- median(try_stops,na.rm=TRUE)
-		  stop_cutoff_table <- rbind(stop_cutoff_table, c(pos, median))
-		  names(stop_cutoff_table) <- c('position', 'median')
-		}
-		print(stop_cutoff_table)
 		
-		# choose the cutoff visually from the plot 
-		stop_cut_plot <- ggplot(data = stop_cutoff_table,
-		                        mapping = aes(x = position, y = median)) +
-		  geom_line() +
+		# make plot to choose stop cutoff manually
+		tiffFile <- paste0(outdir,"region",region.i,"_choose_stop_cutoff_2.tiff")
+		tiff(tiffFile, units="in", width=4, height=3, res=300)
+		stop_cut_plot_2 <- ggplot(data = rawScores[grepl("Ter$",rawScores$hgvsp),],
+		                        mapping = aes(x = positions, y =mean.lphi)) +
+		  geom_point() +
 		  theme_linedraw() +
-		  ylab(expression(paste('median ', log(phi)))) +
-		  xlab('aa position')
-		print(stop_cut_plot)
+		  geom_smooth() +
+		  ylab(expression(log(phi))) +
+		  xlab('AA position')
+		print(stop_cut_plot_2)
+		dev.off()
 		
-		# CHOOSE 350!! for GDI1
-		stop_cutoff <- 350 # this is a constant for GDI1
+		
+		# set the stop cutoff to the length of the gene if not provided
+		if (is.null(stop_cutoff)) {
+		  stop_cutoff <- length
+		}
 		# now we have chosen the cutoff, calculate the medians to use to scale the fitness scores
 		stops <- rawScores$mean.lphi[which(grepl("Ter$",rawScores$hgvsp) 
 		                                   & rawScores$bsd.lphi < sdCutoff 
-		                                   & rawScores$positions <= stop_cutoff # added by Rachel
+		                                   & rawScores$positions <= stop_cutoff 
 		                                     )]
 		syns <- rawScores$mean.lphi[which(grepl("=$",rawScores$hgvsp) & rawScores$bsd.lphi < sdCutoff)]
 		modes <- c(stop=median(stops,na.rm=TRUE),syn=median(syns,na.rm=TRUE)) # keep this for jochen's plots but i will use a different variable name for mine
@@ -676,6 +660,8 @@ my_analyzeLegacyTileseqCounts <- function(countfile,regionfile,outdir,logger=NUL
 		median_stop <- round(median(stops,na.rm=TRUE), digits = 2)
 
 		# plot only the syns and stops used in the median calculation
+		tiffFile <- paste0(outdir,"region",region.i,"_syn_stop_for_scaling.tiff")
+		tiff(tiffFile, units="in", width=4, height=2.5, res=300)
 		hist1 <- ggplot() +
 		  geom_histogram(data = data.frame(mean.lphi=stops), mapping = aes(x = mean.lphi, y = ..density..),  fill = 'darkred', alpha = 0.5, col = 'black') +
 		  geom_histogram(data = data.frame(mean.lphi=syns), mapping = aes(x = mean.lphi, y = ..density..),  fill = 'darkgreen', alpha = 0.5, col = 'black') +
@@ -686,6 +672,7 @@ my_analyzeLegacyTileseqCounts <- function(countfile,regionfile,outdir,logger=NUL
 		  geom_text(aes(x=median_stop + 0.15, label=median_stop, y=6)) +
 		  xlab(expression(log(phi)))
 		print(hist1)
+		dev.off()
 		
 		# plot ALL of the syns and stops and their medians
 		stop.is <- which(grepl("Ter$",rawScores$hgvsp))
@@ -694,6 +681,8 @@ my_analyzeLegacyTileseqCounts <- function(countfile,regionfile,outdir,logger=NUL
 		all_stop_median <- round(median(rawScores$mean.lphi[stop.is]), digits = 2)
 		all_syn_median <- round(median(rawScores$mean.lphi[syn.is]), digits = 2)
 		
+		tiffFile <- paste0(outdir,"region",region.i,"_all_syn_stop.tiff")
+		tiff(tiffFile, units="in", width=4, height=2.5, res=300)
 		hist2 <- ggplot() +
 		  geom_histogram(data = rawScores[stop.is,], mapping = aes(x = mean.lphi, y = ..density..),  fill = 'darkred', alpha = 0.5, col = 'black') +
 		  geom_histogram(data = rawScores[syn.is,], mapping = aes(x = mean.lphi, y = ..density..),  fill = 'darkgreen', alpha = 0.5, col = 'black') +
@@ -704,17 +693,36 @@ my_analyzeLegacyTileseqCounts <- function(countfile,regionfile,outdir,logger=NUL
 		  geom_text(aes(x=all_stop_median + 0.15, label=all_stop_median, y=6)) +
 		  xlab(expression(log(phi)))
 		print(hist2)
+		dev.off()
 		
-		# plot the missense and the syn and stops medians used for regulatization
+		# plot all syns and stops but with the medians used for scaling
+		tiffFile <- paste0(outdir,"region",region.i,"_all_syn_stop_with_filtered_medians.tiff")
+		tiff(tiffFile, units="in", width=4, height=2.5, res=300)
+		hist4 <- ggplot() +
+		  geom_histogram(data = rawScores[stop.is,], mapping = aes(x = mean.lphi, y = ..density..),  fill = 'darkred', alpha = 0.5, col = 'black') +
+		  geom_histogram(data = rawScores[syn.is,], mapping = aes(x = mean.lphi, y = ..density..),  fill = 'darkgreen', alpha = 0.5, col = 'black') +
+		  theme_linedraw() +
+		  geom_vline(xintercept = median_stop, size=1, linetype=2, color='darkred') +
+		  geom_vline(xintercept = median_syn, size=1, linetype=2, color='darkgreen') +
+		  geom_text(aes(x=median_syn + 0.15, label=median_syn, y=6)) +
+		  geom_text(aes(x=median_stop + 0.15, label=median_stop, y=6)) +
+		  xlab(expression(log(phi)))
+		print(hist4)
+		dev.off()
+		
+		# plot the missense and medians used for scaling
+		tiffFile <- paste0(outdir,"region",region.i,"_all_missense.tiff")
+		tiff(tiffFile, units="in", width=4, height=2.5, res=300)
 		hist3 <- ggplot() +
 		  geom_histogram(data = rawScores[miss.is,], mapping = aes(x = mean.lphi),  fill = 'grey', alpha = 0.5, col = 'black') +
 		  theme_linedraw() +
 		  geom_vline(xintercept = median_stop, size=1, linetype=2, color='darkred') +
 		  geom_vline(xintercept = median_syn, size=1, linetype=2, color='darkgreen') +
-		  geom_text(aes(x=median_syn + 0.2, label=median_syn, y=350)) +
-		  geom_text(aes(x=median_stop + 0.2, label=median_stop, y=350)) +
+		  geom_text(aes(x=median_syn + 0.2, label=median_syn, y=250)) +
+		  geom_text(aes(x=median_stop + 0.2, label=median_stop, y=250)) +
 		  xlab(expression(log(phi)))
 		print(hist3)
+		dev.off()
 
 		#################
 		#Plot Syn vs stop
@@ -750,7 +758,7 @@ my_analyzeLegacyTileseqCounts <- function(countfile,regionfile,outdir,logger=NUL
 
 
 		#################
-		# Use syn/stop modes to scale scores
+		# Use syn/stop medians to scale scores
 		#################
 
 		logInfo(sprintf(
