@@ -28,28 +28,35 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with tileseqMave.  If not, see <https://www.gnu.org/licenses/>.
 
+#' Analyze tileseq counts 2
 #'
-#' This analysis function performs the following steps for each mutagenesis region:
-#' 1. Construction of HGVS variant descriptor strings.
-#' 2. Collapsing equivalent codons into amino acic change counts.
-#' 3. Error regularization at the level of pre- and post-selection counts.
-#' 4. Quality-based filtering filtering based on "Song's rule". AND BOTTLENECK FILTER
-#' 5. Fitness score calculation and error propagation.
-#' 6. Secondary error regularization at the level of fitness scores.
-#' 7. Determination of synonymous and nonsense medians and re-scaling of fitness scores.
-#' 8. Flooring of negative scores and adjustment of associated error.
-#' 9. Output in MaveDB format.
+#'  This analysis function performs the following steps for each mutagenesis region (see 
+#'  details for the new changes in this version):
+#'  \enumerate {
+#'  
+#' \item 1. Construction of HGVS variant descriptor strings.
+#' \item 2. Collapsing equivalent codons into amino acic change counts.
+#' \item 3. Error regularization at the level of pre- and post-selection counts.
+#' \item 4. Quality-based filtering filtering based on "Song's rule". AND BOTTLENECK FILTER
+#' \item 5. Fitness score calculation and error propagation.
+#' \item 6. Secondary error regularization at the level of fitness scores.
+#' \item 7. Determination of synonymous and nonsense medians and re-scaling of fitness scores.
+#' \item 8. Flooring of negative scores and adjustment of associated error.
+#' \item 9. Output in MaveDB format.
+#' }
 #' 
-#' Plus several new changes:
-#' 1. bottleneck and song's filter now filter out variants that are 0 in EITHER replicate (not the mean of the replicates)
-#' 2. add a plot for choosing position cutoff for calculating the median stop log(phi) 
-#' 3. multiple plots for visualization of data
-#' 4. can now turn off bottleneck (Select) filter
-#' 5. option to change the number of SDs to use in bottleneck and Song's filter (more or less conservative)
-#' 6. Include option to use a stop cutoff for calculating stop median
-#' 7. Can customize how many variants must pass filters for calculating medians
-#' 8. Can customize the quality threshhold for median calculation (and an alternative one in the case not enough variants pass the first one)
-#' 9. Added a nonselect count filter, remove any variants that are not abundant enough in nonselect condition
+#' New changes in this version ("2"):
+#' \enumerate {
+#' \item 1. bottleneck and song's filter now filter out variants that are 0 in EITHER replicate (not the mean of the replicates)
+#' \item 2. add a plot for choosing position cutoff for calculating the median stop log(phi) 
+#' \item 3. multiple plots for visualization of data
+#' \item 4. can now turn off bottleneck (Select) filter
+#' \item 5. option to change the number of SDs to use in bottleneck and Song's filter (more or less conservative)
+#' \item 6. Include option to use a stop cutoff for calculating stop median
+#' \item 7. Can customize how many variants must pass filters for calculating medians
+#' \item 8. Can customize the quality threshhold for median calculation (and an alternative one in the case not enough variants pass the first one)
+#' \item 9. Added a nonselect count filter, remove any variants that are not abundant enough in nonselect condition
+#' }
 
 #' 
 #' @param countfile the path to the "rawData.txt" file produced by the legacy pipeline.
@@ -96,11 +103,11 @@
 #'
 #' @return nothing. output is written to various files in the output directory
 #' 
-#' @import ggplot2
 #' 
+#' @import ggplot2
 #' @export
 #' 
-my_analyzeLegacyTileseqCounts <- function(countfile,
+analyzeLegacyTileseqCounts2 <- function(countfile,
                                           regionfile,
                                           outdir,
                                           logger=NULL,
@@ -637,7 +644,7 @@ my_analyzeLegacyTileseqCounts <- function(countfile,
 		#################
 
 		####################3
-		#TODO: Require minimum amount of filter passes rather than just 1
+		
 		#TODO: Try gaussian mixture models with two underlying distributions?
 		#########################
 		
@@ -755,8 +762,8 @@ my_analyzeLegacyTileseqCounts <- function(countfile,
 		  theme_linedraw() +
 		  geom_vline(xintercept = median_stop, size=1, linetype=2, color='darkred') +
 		  geom_vline(xintercept = median_syn, size=1, linetype=2, color='darkgreen') +
-		  geom_text(aes(x=median_syn + 0.2, label=median_syn, y=250)) +
-		  geom_text(aes(x=median_stop + 0.2, label=median_stop, y=250)) +
+		  geom_text(aes(x=median_syn + 0.2, label=median_syn, y=200)) +
+		  geom_text(aes(x=median_stop + 0.2, label=median_stop, y=200)) +
 		  xlab(expression(log(phi)))
 		print(hist3)
 		dev.off()

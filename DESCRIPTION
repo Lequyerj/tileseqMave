@@ -9,6 +9,6 @@ Encoding: UTF-8
 LazyData: true
 Suggests: 
     testthat
-Imports: mavevis, rapimave, hgvsParseR, yogitools, yogilog, ggplot2
-Remotes: github::VariantEffect/mavevis, github::VariantEffect/rapimave, github::VariantEffect/hgvsParseR, github::jweile/yogitools
-RoxygenNote: 6.1.1
+Imports: rapimave, hgvsParseR, yogitools, yogilog, ggplot2
+Remotes: github::VariantEffect/rapimave, github::VariantEffect/hgvsParseR, github::jweile/yogitools
+RoxygenNote: 6.1.1.9000
