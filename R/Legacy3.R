@@ -4,7 +4,8 @@
 # 2. Changed how data is handled at many stages
 # 3. Now confidence intervals are used to specify Bottleneck/Song's filter cutoff
 # 4. Now the output contains confidence intervals, rather than standard error
-# 5. Added graphs to help determine the minimum nonselect counts cutoff introduced by Rachel
+# 5. Added graphs to help determine the minimum nonselect counts cutoff introduced by Rachel, by region
+# 6. Calculates correlation between substitutions producing same AA, by region
 # Changes made by Rachel include:
 # 1. bottleneck and song's filter now filter out variants that are 0 in EITHER replicate (not the mean of the replicates)
 # 2. add a plot for choosing position cutoff for calculating the median stop log(phi) 
@@ -65,12 +66,8 @@
 #' @param logger a yogilogger object to be used for logging (or NULL for simple printing)
 #' @param inverseAssay a boolean flag to indicate that the experiment was done with an inverse assay
 #'       i.e. protein function leading to decreased fitness. Defaults to FALSE
-#' @param pseudoObservations The number of pseudoObservations to use for the Baldi&Long regularization.
-#'       Defaults to 2.
-#' @param conservativeMode Boolean flag. When turned on, pseudoObservations are not counted towards 
-#'       standard error and the first round of regularization uses pessimistic error estimates.
-#' @param min_nonselect_counts Numeric. Nonselective counts filter cutoff (in reads/million).
-#'       Filter all variants below this count out of the entire data set. Default is -Inf.
+#' @param min_nonselect_counts Vector. Nonselective counts filter cutoff (in reads/million).
+#'       Filter all variants below this count out of the entire region. Default is c(0,0,0,...).
 #' @param stop_cutoff Integer. The amino position above which to not include stop mutations in calculation
 #'       of the stop median for scaling fitness scores. Default is NULL, in which case the length of the
 #'       gene is chosen. This script outputs a plot in outdir to help choose this parameter in
@@ -108,8 +105,6 @@ my_analyzeLegacyTileseqCounts <- function(countfile,
                                           outdir,
                                           logger=NULL,
                                           inverseAssay=FALSE,
-                                          pseudoObservations=2,
-                                          conservativeMode=TRUE, 
                                           ns_filt_num_sd=3,
                                           select_filt_num_sd=3, 
                                           select_filt=T, 
@@ -118,7 +113,7 @@ my_analyzeLegacyTileseqCounts <- function(countfile,
                                           sdCutoff=3, 
                                           sdCutoffAlt=4, 
                                           min_variants_to_choose_median=10,
-                                          nb=100, #Number of bootstrap samples to take. When testing, set to 10 to save time; otherwise set to 100.
+                                          nb=100, #Number of bootstrap samples to take. When testing, set to 10 to save time; otherwise set to 100 or more.
                                           ciSong = c(0,97.5), #Confidence interval to use for Song's filter
                                           ciBottle = c(0,97.5), #Confidence interval to use for Bottlenecking filter
                                           ci = c(2.5,97.5) #Confidence interval to display with final scores
@@ -421,10 +416,7 @@ my_analyzeLegacyTileseqCounts <- function(countfile,
       BootMatNuc[j,11] <- mean(c(as.numeric(BootMatNuc[j,9]),as.numeric(BootMatNuc[j,10])))
       BootMatNuc[j,12] <- rawCounts[k,"hgvsp"]
       BootMatNuc[j,13] <- rawCounts[k,"hgvsc"]
-      BootMatNuc[j,14] <- rawCounts[k,"Region"]
-    }
-  }
-  
+      BootMatNuc[j,14] <- rawCounts[k,"Region"]}}
   #Calculate Combined AA Scores
   BootMatAA <- BootMatNuc[,10:13]
   hgvsp <- unique(rawCounts[,"hgvsp"])
@@ -466,7 +458,8 @@ my_analyzeLegacyTileseqCounts <- function(countfile,
   BootMatNuc[,"Region"] <- as.numeric(as.character(BootMatNuc[,"Region"]))
   BootMatNuc[,"nonselect1"] <- as.numeric(as.character(BootMatNuc[,"nonselect1"]))
 
-  
+  OutBootMatAA <- BootMatAA[,c("hgvsp","MeanScore","Region")]
+  OutBootMatNuc <- BootMatNuc[,c("hgvsc","MeanScore","Region")]
   #################
   # Estimate Modes of synonymous and stop
   #################
@@ -559,7 +552,8 @@ my_analyzeLegacyTileseqCounts <- function(countfile,
         LocalBootMatNuc[k,"MeanScore"] <- (log(max(0.0001,LocalBootMatNuc[k,"MeanScore"]))-log(modes[["stop"]]))/denom}
       SampleBootMatAA[LocalRows1,] <- LocalBootMatAA
       SampleBootMatNuc[LocalRows2,] <- LocalBootMatNuc}
-    colnames(SampleBootMatAA) <- c("hgvsp","score","CILower","CIUpper")
+    OutBootMatAA[OutBootMatAA[,"Region"]==j,1:2] <- SampleBootMatAA[,1:2]
+    OutBootMatNuc[OutBootMatNuc[,"Region"]==j,1:2] <- SampleBootMatNuc[,1:2]
     #Caclulate bootstrap averages
     for (i in 1:(nrow(SampleBootMatAA)/nb)){
       combined <- SampleBootMatAA[(nb*(i-1)+1):(nb*i),2]
@@ -734,26 +728,29 @@ my_analyzeLegacyTileseqCounts <- function(countfile,
   # Write output to file
   #################
   
+  
   #protein-level MaveDB output
   outfile <- paste0(outdir,"mavedb_scores_perAA",".csv")
   write.csv(OutputAA[,1:4],outfile,row.names=FALSE)
   
+  #protein-level MaveDB Bootstrap matrix
+  outfile <- paste0(outdir,"mavedb_scores_perAA_boot",".csv")
+  write.csv(OutBootMatAA,outfile,row.names=FALSE)
+  
   #nucleotide-level MaveDB output
   outfile <- paste0(outdir,"mavedb_scores_perNt",".csv")
-  write.csv(OutputNuc[,1:4],outfile,row.names=FALSE)
-}
+  write.csv(OutputNuc[,1:4],outfile,row.names=FALSE)}
 
-my_analyzeLegacyTileseqCounts(countfile,
-                              regionfile,
-                              outdir,
-                              logger=NULL,
-                              inverseAssay=FALSE,
-                              pseudoObservations=2,
-                              conservativeMode=FALSE, 
-                              min_nonselect_counts=c(400,200,350,350),
-                              stop_cutoff=100000, 
-                              sdCutoff=3, 
-                              sdCutoffAlt=4, 
-                              min_variants_to_choose_median=10,
-                              nb=30
-)
+#Uncomment below for testing
+
+# my_analyzeLegacyTileseqCounts(countfile,
+#                              regionfile,
+#                              outdir,
+#                              logger=NULL,
+#                              inverseAssay=FALSE,
+#                              min_nonselect_counts=c(400,200,350,350),
+#                              stop_cutoff=100000, 
+#                              sdCutoff=3, 
+#                              sdCutoffAlt=4, 
+#                              min_variants_to_choose_median=10,
+#                              nb=30)
