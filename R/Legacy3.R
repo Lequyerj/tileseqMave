@@ -100,7 +100,7 @@
 #' 
 #' @export
 #' 
-my_analyzeLegacyTileseqCounts <- function(countfile,
+Bootstrap_analyzeLegacyTileseqCounts <- function(countfile,
                                           regionfile,
                                           outdir,
                                           logger=NULL,
@@ -180,7 +180,6 @@ my_analyzeLegacyTileseqCounts <- function(countfile,
     all(apply(regions[,4:5],2,class) %in% c("integer","numeric","logical")),
     c("region","start","end","syn","stop") %in% colnames(regions)
   )
-  
   #make sure outdir ends with a "/"
   if (!grepl("/$",outdir)) {
     outdir <- paste0(outdir,"/")
@@ -335,7 +334,7 @@ my_analyzeLegacyTileseqCounts <- function(countfile,
     flagged3[j] <- rawCounts[j,"nonselect.mean"] < min_nonselect_counts[reg]}
   #Maximum nonselect counts filter (use sparingly)
   flagged4 <- with(as.data.frame(rawCounts), {
-    nonselect.mean > quantile(rawCounts[,"nonselect.mean"],0.95)
+    nonselect.mean > quantile(rawCounts[,"nonselect.mean"],0.99)
   })
   logInfo(sprintf(
     "Filtering out %d variants (=%.02f%%):
@@ -366,11 +365,6 @@ my_analyzeLegacyTileseqCounts <- function(countfile,
     rawCounts
   ))
   
-  
-  logInfo("Parsing variant strings...")
-  rawCountMuts <- parseHGVS(rawCounts$hgvsp)
-  rawCountMuts$type[which(rawCountMuts$variant=="Ter")] <- "nonsense"
-  logInfo("Parsing complete.")
   
   #########
   # Compute bootstrap sample matrix
@@ -413,7 +407,7 @@ my_analyzeLegacyTileseqCounts <- function(countfile,
       BootMatNuc[j,8] <- selectC.b[2]
       BootMatNuc[j,9] <- (select.b[1]-selectC.b[1])/(nonselect.b[1]-nonselectC.b[1])
       BootMatNuc[j,10] <- (select.b[2]-selectC.b[2])/(nonselect.b[2]-nonselectC.b[2])
-      BootMatNuc[j,11] <- mean(c(as.numeric(BootMatNuc[j,9]),as.numeric(BootMatNuc[j,10])))
+      BootMatNuc[j,11] <- exp(mean(c(log(as.numeric(BootMatNuc[j,9])),log(as.numeric(BootMatNuc[j,10])))))
       BootMatNuc[j,12] <- rawCounts[k,"hgvsp"]
       BootMatNuc[j,13] <- rawCounts[k,"hgvsc"]
       BootMatNuc[j,14] <- rawCounts[k,"Region"]}}
@@ -435,7 +429,7 @@ my_analyzeLegacyTileseqCounts <- function(countfile,
         CrudeScores[j+dim(BootLocal)[1]/nb] <- as.numeric(BootLocal[i+(j-1)*nb,"CrudeScore2"])
       }
       BootMatAA[i+counter,1] <- amino
-      BootMatAA[i+counter,2] <- mean(CrudeScores)
+      BootMatAA[i+counter,2] <- exp(mean(log(CrudeScores)))
       BootMatAA[i+counter,3] <- sd(CrudeScores)
       BootMatAA[i+counter,4] <- BootLocal[1,"Region"]
     }
@@ -572,11 +566,11 @@ my_analyzeLegacyTileseqCounts <- function(countfile,
       SampleBootMatNuc[i,4] <- confint[2]}
     SampleBootMatNuc <- SampleBootMatNuc[1:(nrow(SampleBootMatNuc)/nb),]
     colnames(SampleBootMatNuc) <- c("hgvsc","score","CILower","CIUpper","hgvsp","nonselect1")
-    
     TestMat <- SampleBootMatNuc[,c("score","CILower","hgvsp","nonselect1")]
     PreTest <- TestMat
+    localhgvsp <- unique(PreTest[,"hgvsp"])
     counter <- 1
-    for (amino in hgvsp){
+    for (amino in localhgvsp){
       localbooter <- PreTest[PreTest[,"hgvsp"]==amino,]
       if (nrow(localbooter)>=2){
         TestMat[counter,1] <- (localbooter[1,"score"]-localbooter[2,"score"])^2
@@ -743,14 +737,14 @@ my_analyzeLegacyTileseqCounts <- function(countfile,
 
 #Uncomment below for testing
 
-# my_analyzeLegacyTileseqCounts(countfile,
-#                              regionfile,
-#                              outdir,
-#                              logger=NULL,
-#                              inverseAssay=FALSE,
-#                              min_nonselect_counts=c(400,200,350,350),
-#                              stop_cutoff=100000, 
-#                              sdCutoff=3, 
-#                              sdCutoffAlt=4, 
-#                              min_variants_to_choose_median=10,
-#                              nb=30)
+Bootstrap_analyzeLegacyTileseqCounts(countfile,
+                              regionfile,
+                              outdir,
+                              logger=NULL,
+                              inverseAssay=FALSE,
+                              min_nonselect_counts=c(0,0,0,0,0,0,0,0,0,0),
+                              stop_cutoff=100000, 
+                              sdCutoff=3, 
+                              sdCutoffAlt=4, 
+                              min_variants_to_choose_median=10,
+                              nb=30)
