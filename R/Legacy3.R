@@ -100,7 +100,7 @@
 #' 
 #' @export
 #' 
-Bootstrap_analyzeLegacyTileseqCounts <- function(countfile,
+my_analyzeLegacyTileseqCounts <- function(countfile,
                                           regionfile,
                                           outdir,
                                           logger=NULL,
@@ -528,22 +528,22 @@ Bootstrap_analyzeLegacyTileseqCounts <- function(countfile,
       
       #Only log the first iteration to save time
       if (i==1) {logInfo(sprintf(
-        "Scaling to synonymous (phi=%.02f) and nonsense (phi=%.02f) medians.",modes[["syn"]],modes[["stop"]]))}
-      #if manual overrides for the synonymous and stop modes were provided, use them
-      if (!is.na(region.syn)) {
-        logInfo(sprintf(
-          "Using manual override (=%.02f) for synonmous mode instead of automatically determined value (=%.02f).",region.syn,modes[["syn"]]))
-        modes[["syn"]] <- region.syn}
-      if (!is.na(region.stop)) {
-        logInfo(sprintf(
-          "Using manual override (=%.02f) for stop mode instead of automatically determined value (=%.02f).",region.stop,modes[["stop"]]))
-        modes[["stop"]] <- region.stop}
+        "Scaling to synonymous (log(phi)=%.02f) and nonsense (log(phi)=%.02f) medians.",log10(modes[["syn"]]),log10(modes[["stop"]])))
+        #if manual overrides for the synonymous and stop modes were provided, use them
+        if (!is.na(region.syn)) {
+          logInfo(sprintf(
+            "Using manual override (=%.02f) for synonmous mode instead of automatically determined value (=%.02f).",region.syn,log10(modes[["syn"]])))
+            modes[["syn"]] <- 10^(region.syn)}
+        if (!is.na(region.stop)) {
+          logInfo(sprintf(
+            "Using manual override (=%.02f) for stop mode instead of automatically determined value (=%.02f).",region.stop,log10(modes[["stop"]])))
+            modes[["stop"]] <- 10^(region.stop)}}
       #apply the scaling
-      denom <- log(modes[["syn"]])-log(modes[["stop"]])
+      denom <- log10(modes[["syn"]])-log10(modes[["stop"]])
       for (k in 1:nrow(LocalBootMatAA)){
-        LocalBootMatAA[k,"MeanScore"] <- (log(max(0.0001,LocalBootMatAA[k,"MeanScore"]))-log(modes[["stop"]]))/denom}
+        LocalBootMatAA[k,"MeanScore"] <- (log10(max(0.0001,LocalBootMatAA[k,"MeanScore"]))-log10(modes[["stop"]]))/denom}
       for (k in 1:nrow(LocalBootMatNuc)){
-        LocalBootMatNuc[k,"MeanScore"] <- (log(max(0.0001,LocalBootMatNuc[k,"MeanScore"]))-log(modes[["stop"]]))/denom}
+        LocalBootMatNuc[k,"MeanScore"] <- (log10(max(0.0001,LocalBootMatNuc[k,"MeanScore"]))-log10(modes[["stop"]]))/denom}
       SampleBootMatAA[LocalRows1,] <- LocalBootMatAA
       SampleBootMatNuc[LocalRows2,] <- LocalBootMatNuc}
     OutBootMatAA[OutBootMatAA[,"Region"]==j,1:2] <- SampleBootMatAA[,1:2]
@@ -737,14 +737,14 @@ Bootstrap_analyzeLegacyTileseqCounts <- function(countfile,
 
 #Uncomment below for testing
 
-Bootstrap_analyzeLegacyTileseqCounts(countfile,
+my_analyzeLegacyTileseqCounts(countfile,
                               regionfile,
                               outdir,
                               logger=NULL,
                               inverseAssay=FALSE,
-                              min_nonselect_counts=c(0,0,0,0,0,0,0,0,0,0),
+                              min_nonselect_counts=c(600,700,700,400,500,400),
                               stop_cutoff=100000, 
                               sdCutoff=3, 
-                              sdCutoffAlt=4, 
+                              sdCutoffAlt=4,
                               min_variants_to_choose_median=10,
                               nb=30)
