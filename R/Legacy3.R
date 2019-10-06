@@ -109,7 +109,7 @@ my_analyzeLegacyTileseqCounts <- function(countfile,
                                           select_filt_num_sd=3, 
                                           select_filt=T, 
                                           min_nonselect_counts=c(0,0,0,0,0,0,0,0,0,0), #Minimum nonselect count for each region. Length is 10 here, but should be set to a vector of length equal to number of regions
-                                          stop_cutoff=NULL, 
+                                          stop_cutoff=10000, 
                                           sdCutoff=3, 
                                           sdCutoffAlt=4, 
                                           min_variants_to_choose_median=10,
@@ -119,9 +119,9 @@ my_analyzeLegacyTileseqCounts <- function(countfile,
                                           ci = c(2.5,97.5) #Confidence interval to display with final scores
 ) {
   options(warn=-1)
-  #countfile <- "Pipeline/countfile.txt"
-  #regionfile <- "Pipeline/regions.txt"
-  #outdir <- "Test2/"
+  countfile <- "/home/jason/Downloads/countfile.txt"
+  regionfile <- "/home/jason/Downloads/regions.txt"
+  outdir <- "/home/jason/Downloads/"
   # logger <- NULL
   # inverseAssay <- F
   # pseudoObservations <- 2
@@ -742,8 +742,8 @@ my_analyzeLegacyTileseqCounts(countfile,
                               outdir,
                               logger=NULL,
                               inverseAssay=FALSE,
-                              min_nonselect_counts=c(600,700,700,400,500,400),
                               stop_cutoff=100000, 
+                              min_nonselect_counts=c(0,0,0,0,0),
                               sdCutoff=3, 
                               sdCutoffAlt=4,
                               min_variants_to_choose_median=10,
